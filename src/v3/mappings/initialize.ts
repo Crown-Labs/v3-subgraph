@@ -3,7 +3,7 @@ import { BigInt } from '@graphprotocol/graph-ts'
 import { Bundle, Pool, Token } from '../../../generated/schema'
 import { Initialize } from '../../../generated/templates/Pool/Pool'
 import { findEthPerToken, getEthPriceInUSD } from '../../common/pricing'
-import { updatePoolDayData, updatePoolHourData } from './intervalUpdates'
+import { updatePoolDayData } from './intervalUpdates'
 
 export function handleInitialize(event: Initialize): void {
   // update pool sqrt price and tick
@@ -21,8 +21,8 @@ export function handleInitialize(event: Initialize): void {
   bundle.ethPriceUSD = getEthPriceInUSD()
   bundle.save()
 
+  // Update only PoolDayData (removed hourly data)
   updatePoolDayData(event)
-  updatePoolHourData(event)
 
   // update token prices
   if (token0 && token1) {
