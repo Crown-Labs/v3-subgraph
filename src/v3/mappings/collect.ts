@@ -1,19 +1,12 @@
-import { Address, BigInt } from '@graphprotocol/graph-ts'
+import { Address } from '@graphprotocol/graph-ts'
 
-import { Bundle, Collect, Factory, Pool, Token } from '../../../generated/schema'
+import { Bundle, Factory, Pool, Token } from '../../../generated/schema'
 import { Collect as CollectEvent } from '../../../generated/templates/Pool/Pool'
 import { FACTORY_ADDRESS } from '../../common/chain'
 import { ONE_BI } from '../../common/constants'
 import { getTrackedAmountUSD } from '../../common/pricing'
 import { convertTokenToDecimal } from '../../common/utils'
-import {
-  updatePoolDayData,
-  updatePoolHourData,
-  updateTokenDayData,
-  updateTokenHourData,
-  updateUniswapDayData,
-} from './intervalUpdates'
-import { loadTransaction } from './utils'
+import { updatePoolDayData } from './intervalUpdates'
 
 export function handleCollect(event: CollectEvent): void {
   const factoryAddress = Address.fromString(FACTORY_ADDRESS)
@@ -23,7 +16,6 @@ export function handleCollect(event: CollectEvent): void {
   if (pool == null) {
     return
   }
-  const transaction = loadTransaction(event)
   const factory = Factory.load(factoryAddress.toHexString())!
 
   const token0 = Token.load(pool.token0)
@@ -75,31 +67,14 @@ export function handleCollect(event: CollectEvent): void {
   factory.totalValueLockedETH = factory.totalValueLockedETH.plus(pool.totalValueLockedETH)
   factory.totalValueLockedUSD = factory.totalValueLockedETH.times(bundle.ethPriceUSD)
 
-  const collect = new Collect(transaction.id + '-' + event.logIndex.toString())
-  collect.transaction = transaction.id
-  collect.timestamp = event.block.timestamp
-  collect.pool = pool.id
-  collect.owner = event.params.owner
-  collect.amount0 = collectedAmountToken0
-  collect.amount1 = collectedAmountToken1
-  collect.amountUSD = trackedCollectedAmountUSD
-  collect.tickLower = BigInt.fromI32(event.params.tickLower)
-  collect.tickUpper = BigInt.fromI32(event.params.tickUpper)
-  collect.logIndex = event.logIndex
-
-  updateUniswapDayData(event, factoryAddress.toHexString())
+  // Update only PoolDayData (removed hourly and token interval data)
   updatePoolDayData(event)
-  updatePoolHourData(event)
-  updateTokenDayData(token0 as Token, event)
-  updateTokenDayData(token1 as Token, event)
-  updateTokenHourData(token0 as Token, event)
-  updateTokenHourData(token1 as Token, event)
 
   token0.save()
   token1.save()
   factory.save()
   pool.save()
-  collect.save()
+  // Removed: collect.save() - no longer creating Collect entity
 
   return
 }

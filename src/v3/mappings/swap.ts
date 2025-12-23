@@ -1,19 +1,12 @@
 import { Address, BigDecimal, BigInt } from '@graphprotocol/graph-ts'
 
-import { Bundle, Factory, Pool, Swap, Token } from '../../../generated/schema'
+import { Bundle, Factory, Pool, Token } from '../../../generated/schema'
 import { Swap as SwapEvent } from '../../../generated/templates/Pool/Pool'
 import { FACTORY_ADDRESS } from '../../common/chain'
 import { ONE_BI, ZERO_BD } from '../../common/constants'
 import { findEthPerToken, getEthPriceInUSD, getTrackedAmountUSD, sqrtPriceX96ToTokenPrices } from '../../common/pricing'
 import { convertTokenToDecimal, safeDiv } from '../../common/utils'
-import {
-  updatePoolDayData,
-  updatePoolHourData,
-  updateTokenDayData,
-  updateTokenHourData,
-  updateUniswapDayData,
-} from './intervalUpdates'
-import { loadTransaction } from './utils'
+import { updatePoolDayData } from './intervalUpdates'
 
 export function handleSwap(event: SwapEvent): void {
   const factoryAddress = Address.fromString(FACTORY_ADDRESS)
@@ -129,77 +122,17 @@ export function handleSwap(event: SwapEvent): void {
     token0.totalValueLockedUSD = token0.totalValueLocked.times(token0.derivedETH).times(bundle.ethPriceUSD)
     token1.totalValueLockedUSD = token1.totalValueLocked.times(token1.derivedETH).times(bundle.ethPriceUSD)
 
-    // create Swap event
-    const transaction = loadTransaction(event)
-    const swap = new Swap(transaction.id + '-' + event.logIndex.toString())
-    swap.transaction = transaction.id
-    swap.timestamp = transaction.timestamp
-    swap.pool = pool.id
-    swap.token0 = pool.token0
-    swap.token1 = pool.token1
-    swap.sender = event.params.sender
-    swap.origin = event.transaction.from
-    swap.recipient = event.params.recipient
-    swap.amount0 = amount0
-    swap.amount1 = amount1
-    swap.amountUSD = amountTotalUSDTracked
-    swap.tick = BigInt.fromI32(event.params.tick as i32)
-    swap.sqrtPriceX96 = event.params.sqrtPriceX96
-    swap.logIndex = event.logIndex
-
-    // interval data
-    const uniswapDayData = updateUniswapDayData(event, factoryAddress.toHexString())
+    // interval data - only update PoolDayData (removed hourly and token data)
     const poolDayData = updatePoolDayData(event)
-    const poolHourData = updatePoolHourData(event)
-    const token0DayData = updateTokenDayData(token0 as Token, event)
-    const token1DayData = updateTokenDayData(token1 as Token, event)
-    const token0HourData = updateTokenHourData(token0 as Token, event)
-    const token1HourData = updateTokenHourData(token1 as Token, event)
 
-    // update volume metrics
-    uniswapDayData.volumeETH = uniswapDayData.volumeETH.plus(amountTotalETHTracked)
-    uniswapDayData.volumeUSD = uniswapDayData.volumeUSD.plus(amountTotalUSDTracked)
-    uniswapDayData.feesUSD = uniswapDayData.feesUSD.plus(feesUSD)
-
+    // update volume metrics for PoolDayData only
     poolDayData.volumeUSD = poolDayData.volumeUSD.plus(amountTotalUSDTracked)
     poolDayData.volumeToken0 = poolDayData.volumeToken0.plus(amount0Abs)
     poolDayData.volumeToken1 = poolDayData.volumeToken1.plus(amount1Abs)
     poolDayData.feesUSD = poolDayData.feesUSD.plus(feesUSD)
 
-    poolHourData.volumeUSD = poolHourData.volumeUSD.plus(amountTotalUSDTracked)
-    poolHourData.volumeToken0 = poolHourData.volumeToken0.plus(amount0Abs)
-    poolHourData.volumeToken1 = poolHourData.volumeToken1.plus(amount1Abs)
-    poolHourData.feesUSD = poolHourData.feesUSD.plus(feesUSD)
-
-    token0DayData.volume = token0DayData.volume.plus(amount0Abs)
-    token0DayData.volumeUSD = token0DayData.volumeUSD.plus(amountTotalUSDTracked)
-    token0DayData.untrackedVolumeUSD = token0DayData.untrackedVolumeUSD.plus(amountTotalUSDTracked)
-    token0DayData.feesUSD = token0DayData.feesUSD.plus(feesUSD)
-
-    token0HourData.volume = token0HourData.volume.plus(amount0Abs)
-    token0HourData.volumeUSD = token0HourData.volumeUSD.plus(amountTotalUSDTracked)
-    token0HourData.untrackedVolumeUSD = token0HourData.untrackedVolumeUSD.plus(amountTotalUSDTracked)
-    token0HourData.feesUSD = token0HourData.feesUSD.plus(feesUSD)
-
-    token1DayData.volume = token1DayData.volume.plus(amount1Abs)
-    token1DayData.volumeUSD = token1DayData.volumeUSD.plus(amountTotalUSDTracked)
-    token1DayData.untrackedVolumeUSD = token1DayData.untrackedVolumeUSD.plus(amountTotalUSDTracked)
-    token1DayData.feesUSD = token1DayData.feesUSD.plus(feesUSD)
-
-    token1HourData.volume = token1HourData.volume.plus(amount1Abs)
-    token1HourData.volumeUSD = token1HourData.volumeUSD.plus(amountTotalUSDTracked)
-    token1HourData.untrackedVolumeUSD = token1HourData.untrackedVolumeUSD.plus(amountTotalUSDTracked)
-    token1HourData.feesUSD = token1HourData.feesUSD.plus(feesUSD)
-
-    swap.save()
-    token0DayData.save()
-    token1DayData.save()
-    uniswapDayData.save()
+    // Save entities (removed Swap entity, Transaction, and hourly data saves)
     poolDayData.save()
-    poolHourData.save()
-    token0HourData.save()
-    token1HourData.save()
-    poolHourData.save()
     factory.save()
     pool.save()
     token0.save()

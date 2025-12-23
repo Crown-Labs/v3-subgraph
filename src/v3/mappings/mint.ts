@@ -1,19 +1,12 @@
 import { Address, BigInt } from '@graphprotocol/graph-ts'
 
-import { Bundle, Factory, Mint, Pool, Tick, Token } from '../../../generated/schema'
+import { Bundle, Factory, Pool, Tick, Token } from '../../../generated/schema'
 import { Mint as MintEvent } from '../../../generated/templates/Pool/Pool'
 import { FACTORY_ADDRESS } from '../../common/chain'
 import { ONE_BI } from '../../common/constants'
 import { convertTokenToDecimal } from '../../common/utils'
-import {
-  updatePoolDayData,
-  updatePoolHourData,
-  updateTokenDayData,
-  updateTokenHourData,
-  updateUniswapDayData,
-} from './intervalUpdates'
+import { updatePoolDayData } from './intervalUpdates'
 import { createTick } from './tick'
-import { loadTransaction } from './utils'
 
 export function handleMint(event: MintEvent): void {
   const factoryAddress = Address.fromString(FACTORY_ADDRESS)
@@ -28,10 +21,6 @@ export function handleMint(event: MintEvent): void {
   if (token0 && token1) {
     const amount0 = convertTokenToDecimal(event.params.amount0, token0.decimals)
     const amount1 = convertTokenToDecimal(event.params.amount1, token1.decimals)
-
-    const amountUSD = amount0
-      .times(token0.derivedETH.times(bundle.ethPriceUSD))
-      .plus(amount1.times(token1.derivedETH.times(bundle.ethPriceUSD)))
 
     // reset tvl aggregates until new amounts calculated
     factory.totalValueLockedETH = factory.totalValueLockedETH.minus(pool.totalValueLockedETH)
@@ -73,24 +62,6 @@ export function handleMint(event: MintEvent): void {
     factory.totalValueLockedETH = factory.totalValueLockedETH.plus(pool.totalValueLockedETH)
     factory.totalValueLockedUSD = factory.totalValueLockedETH.times(bundle.ethPriceUSD)
 
-    const transaction = loadTransaction(event)
-    const mint = new Mint(transaction.id.toString() + '-' + event.logIndex.toString())
-    mint.transaction = transaction.id
-    mint.timestamp = transaction.timestamp
-    mint.pool = pool.id
-    mint.token0 = pool.token0
-    mint.token1 = pool.token1
-    mint.owner = event.params.owner
-    mint.sender = event.params.sender
-    mint.origin = event.transaction.from
-    mint.amount = event.params.amount
-    mint.amount0 = amount0
-    mint.amount1 = amount1
-    mint.amountUSD = amountUSD
-    mint.tickLower = BigInt.fromI32(event.params.tickLower)
-    mint.tickUpper = BigInt.fromI32(event.params.tickUpper)
-    mint.logIndex = event.logIndex
-
     // tick entities
     const lowerTickIdx = event.params.tickLower
     const upperTickIdx = event.params.tickUpper
@@ -118,21 +89,13 @@ export function handleMint(event: MintEvent): void {
     lowerTick.save()
     upperTick.save()
 
-    // TODO: Update Tick's volume, fees, and liquidity provider count. Computing these on the tick
-    // level requires reimplementing some of the swapping code from v3-core.
-
-    updateUniswapDayData(event, factoryAddress.toHexString())
+    // Update only PoolDayData (removed hourly and token interval data)
     updatePoolDayData(event)
-    updatePoolHourData(event)
-    updateTokenDayData(token0 as Token, event)
-    updateTokenDayData(token1 as Token, event)
-    updateTokenHourData(token0 as Token, event)
-    updateTokenHourData(token1 as Token, event)
 
     token0.save()
     token1.save()
     pool.save()
     factory.save()
-    mint.save()
+    // Removed: mint.save() - no longer creating Mint entity
   }
 }

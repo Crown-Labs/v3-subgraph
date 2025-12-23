@@ -7,10 +7,12 @@ import {
   NonfungiblePositionManager,
   Transfer,
 } from '../../../generated/NonfungiblePositionManager/NonfungiblePositionManager'
-import { Position, PositionSnapshot, Token, Tick } from '../../../generated/schema'
+import { Position, Token } from '../../../generated/schema'
 import { ADDRESS_ZERO, factoryContract, ZERO_BD, ZERO_BI } from '../../common/constants'
 import { convertTokenToDecimal } from '../../common/utils'
-import { loadTransaction } from './utils'
+
+// Removed: PositionSnapshot entity and savePositionSnapshot function
+// Position snapshots are no longer tracked to reduce subgraph size
 
 function getPosition(event: ethereum.Event, tokenId: BigInt): Position | null {
   let position = Position.load(tokenId.toString())
@@ -27,45 +29,11 @@ function getPosition(event: ethereum.Event, tokenId: BigInt): Position | null {
       position.pool = poolAddress
       position.token0 = positionResult.value2
       position.token1 = positionResult.value3
-      const tickLowerIdx = positionResult.value5
-      const tickUpperIdx = positionResult.value6
-      const tickLowerId = poolAddress.toHexString().concat('#').concat(tickLowerIdx.toString())
-      const tickUpperId = poolAddress.toHexString().concat('#').concat(tickUpperIdx.toString())
 
-      // Load or create tick entities
-      let tickLower = Tick.load(tickLowerId)
-      let tickUpper = Tick.load(tickUpperId)
+      // Store tick indices directly as BigInt (no longer referencing Tick entities)
+      position.tickLower = BigInt.fromI32(positionResult.value5)
+      position.tickUpper = BigInt.fromI32(positionResult.value6)
 
-      if (!tickLower) {
-        tickLower = new Tick(tickLowerId)
-        tickLower.tickIdx = BigInt.fromI32(tickLowerIdx)
-        tickLower.pool = poolAddress
-        tickLower.poolAddress = poolAddress
-        tickLower.liquidityGross = ZERO_BI
-        tickLower.liquidityNet = ZERO_BI
-        tickLower.price0 = ZERO_BD
-        tickLower.price1 = ZERO_BD
-        tickLower.createdAtTimestamp = event.block.timestamp
-        tickLower.createdAtBlockNumber = event.block.number
-        tickLower.save()
-      }
-
-      if (!tickUpper) {
-        tickUpper = new Tick(tickUpperId)
-        tickUpper.tickIdx = BigInt.fromI32(tickUpperIdx)
-        tickUpper.pool = poolAddress
-        tickUpper.poolAddress = poolAddress
-        tickUpper.liquidityGross = ZERO_BI
-        tickUpper.liquidityNet = ZERO_BI
-        tickUpper.price0 = ZERO_BD
-        tickUpper.price1 = ZERO_BD
-        tickUpper.createdAtTimestamp = event.block.timestamp
-        tickUpper.createdAtBlockNumber = event.block.number
-        tickUpper.save()
-      }
-
-      position.tickLower = tickLowerId
-      position.tickUpper = tickUpperId
       position.liquidity = ZERO_BI
       position.depositedToken0 = ZERO_BD
       position.depositedToken1 = ZERO_BD
@@ -75,7 +43,7 @@ function getPosition(event: ethereum.Event, tokenId: BigInt): Position | null {
       position.collectedToken1 = ZERO_BD
       position.collectedFeesToken0 = ZERO_BD
       position.collectedFeesToken1 = ZERO_BD
-      position.transaction = loadTransaction(event).id
+      // Removed: position.transaction - Transaction entity no longer exists
       position.feeGrowthInside0LastX128 = positionResult.value8
       position.feeGrowthInside1LastX128 = positionResult.value9
     }
@@ -92,26 +60,6 @@ function updateFeeVars(position: Position, event: ethereum.Event, tokenId: BigIn
     position.feeGrowthInside1LastX128 = positionResult.value.value9
   }
   return position
-}
-
-function savePositionSnapshot(position: Position, event: ethereum.Event): void {
-  const positionSnapshot = new PositionSnapshot(position.id.concat('#').concat(event.block.number.toString()))
-  positionSnapshot.owner = position.owner
-  positionSnapshot.pool = position.pool
-  positionSnapshot.position = position.id
-  positionSnapshot.blockNumber = event.block.number
-  positionSnapshot.timestamp = event.block.timestamp
-  positionSnapshot.liquidity = position.liquidity
-  positionSnapshot.depositedToken0 = position.depositedToken0
-  positionSnapshot.depositedToken1 = position.depositedToken1
-  positionSnapshot.withdrawnToken0 = position.withdrawnToken0
-  positionSnapshot.withdrawnToken1 = position.withdrawnToken1
-  positionSnapshot.collectedFeesToken0 = position.collectedFeesToken0
-  positionSnapshot.collectedFeesToken1 = position.collectedFeesToken1
-  positionSnapshot.transaction = loadTransaction(event).id
-  positionSnapshot.feeGrowthInside0LastX128 = position.feeGrowthInside0LastX128
-  positionSnapshot.feeGrowthInside1LastX128 = position.feeGrowthInside1LastX128
-  positionSnapshot.save()
 }
 
 export function handleIncreaseLiquidity(event: IncreaseLiquidity): void {
@@ -138,8 +86,7 @@ export function handleIncreaseLiquidity(event: IncreaseLiquidity): void {
   updateFeeVars(position, event, event.params.tokenId)
 
   position.save()
-
-  savePositionSnapshot(position, event)
+  // Removed: savePositionSnapshot(position, event)
 }
 
 export function handleDecreaseLiquidity(event: DecreaseLiquidity): void {
@@ -166,8 +113,7 @@ export function handleDecreaseLiquidity(event: DecreaseLiquidity): void {
   position = updateFeeVars(position, event, event.params.tokenId)
 
   position.save()
-
-  savePositionSnapshot(position, event)
+  // Removed: savePositionSnapshot(position, event)
 }
 
 export function handleCollect(event: Collect): void {
@@ -195,8 +141,7 @@ export function handleCollect(event: Collect): void {
   position = updateFeeVars(position, event, event.params.tokenId)
 
   position.save()
-
-  savePositionSnapshot(position, event)
+  // Removed: savePositionSnapshot(position, event)
 }
 
 export function handleTransfer(event: Transfer): void {
@@ -208,6 +153,5 @@ export function handleTransfer(event: Transfer): void {
 
   position.owner = event.params.to
   position.save()
-
-  savePositionSnapshot(position, event)
+  // Removed: savePositionSnapshot(position, event)
 }
